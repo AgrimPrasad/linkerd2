@@ -4,7 +4,11 @@ use super::*;
 fn links_authorization_policy_with_mtls_name() {
     let test = TestConfig::default();
 
-    let mut pod = mk_pod("ns-0", "pod-0", Some(("container-0", None)));
+    let container = k8s::Container {
+        name: "container-0".to_string(),
+        ..Default::default()
+    };
+    let mut pod = mk_pod("ns-0", "pod-0", Some(container));
     pod.labels_mut()
         .insert("app".to_string(), "app-0".to_string());
     test.index.write().apply(pod);
@@ -94,7 +98,11 @@ fn links_authorization_policy_with_mtls_name() {
 fn authorization_targets_namespace() {
     let test = TestConfig::default();
 
-    let mut pod = mk_pod("ns-0", "pod-0", Some(("container-0", None)));
+    let container = k8s::Container {
+        name: "container-0".to_string(),
+        ..Default::default()
+    };
+    let mut pod = mk_pod("ns-0", "pod-0", Some(container));
     pod.labels_mut()
         .insert("app".to_string(), "app-0".to_string());
     test.index.write().apply(pod);
@@ -184,7 +192,11 @@ fn authorization_targets_namespace() {
 fn links_authorization_policy_with_service_account() {
     let test = TestConfig::default();
 
-    let mut pod = mk_pod("ns-0", "pod-0", Some(("container-0", None)));
+    let container = k8s::Container {
+        name: "container-0".to_string(),
+        ..Default::default()
+    };
+    let mut pod = mk_pod("ns-0", "pod-0", Some(container));
     pod.labels_mut()
         .insert("app".to_string(), "app-0".to_string());
     test.index.write().apply(pod);

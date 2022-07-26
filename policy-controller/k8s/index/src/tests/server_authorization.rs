@@ -16,7 +16,11 @@ fn links_server_authz_by_label() {
 fn link_server_authz(selector: ServerSelector) {
     let test = TestConfig::default();
 
-    let mut pod = mk_pod("ns-0", "pod-0", Some(("container-0", None)));
+    let container = k8s::Container {
+        name: "container-0".to_string(),
+        ..Default::default()
+    };
+    let mut pod = mk_pod("ns-0", "pod-0", Some(container));
     pod.labels_mut()
         .insert("app".to_string(), "app-0".to_string());
     test.index.write().apply(pod);

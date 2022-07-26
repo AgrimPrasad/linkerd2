@@ -1,3 +1,8 @@
+use linkerd_policy_controller_core::{
+    http_route::{HttpRouteMatch, InboundHttpRouteRule, Method, PathMatch},
+    InboundHttpRoute,
+};
+
 use super::*;
 
 #[test]
@@ -5,7 +10,11 @@ fn route_attaches_to_server() {
     let test = TestConfig::default();
 
     // Create pod.
-    let mut pod = mk_pod("ns-0", "pod-0", Some(("container-0", None)));
+    let container = k8s::Container {
+        name: "container-0".to_string(),
+        ..Default::default()
+    };
+    let mut pod = mk_pod("ns-0", "pod-0", Some(container));
     pod.labels_mut()
         .insert("app".to_string(), "app-0".to_string());
     test.index.write().apply(pod);
@@ -67,6 +76,88 @@ fn route_attaches_to_server() {
         .contains_key(&AuthorizationRef::AuthorizationPolicy(
             "authz-foo".to_string()
         )));
+}
+
+#[test]
+fn routes_created_for_probes() {
+    let policy = DefaultPolicy::Allow {
+        authenticated_only: false,
+        cluster_only: true,
+    };
+    let probe_networks = vec!["10.0.0.1/24".parse().unwrap()];
+    let test = TestConfig::from_default_policy(policy, Some(probe_networks));
+
+    // Create a pod.
+    let container = k8s::Container {
+        liveness_probe: Some(k8s::Probe {
+            http_get: Some(k8s::HTTPGetAction {
+                path: Some("/liveness-container-1".to_string()),
+                port: k8s::IntOrString::Int(5432),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        readiness_probe: Some(k8s::Probe {
+            http_get: Some(k8s::HTTPGetAction {
+                path: Some("/ready-container-1".to_string()),
+                port: k8s::IntOrString::Int(5432),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let mut pod = mk_pod("ns", "pod", Some(container));
+    pod.labels_mut()
+        .insert("app".to_string(), "app-0".to_string());
+    test.index.write().apply(pod);
+
+    let mut rx = test
+        .index
+        .write()
+        .pod_server_rx("ns", "pod", 5432.try_into().unwrap())
+        .expect("pod.ns should exist");
+
+    let mut expected_authorizations = HashMap::default();
+    expected_authorizations.insert(
+        AuthorizationRef::Default("probe".to_string()),
+        ClientAuthorization {
+            networks: vec!["10.0.0.1/24".parse::<IpNet>().unwrap().into()],
+            authentication: ClientAuthentication::Unauthenticated,
+        },
+    );
+    let mut expected_routes = HashMap::default();
+    expected_routes.insert(
+        "/liveness-container-1".to_string(),
+        InboundHttpRoute {
+            rules: vec![InboundHttpRouteRule {
+                matches: vec![HttpRouteMatch {
+                    path: Some(PathMatch::Exact("/liveness-container-1".to_string())),
+                    method: Some(Method::GET),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            authorizations: expected_authorizations.clone(),
+            ..Default::default()
+        },
+    );
+    expected_routes.insert(
+        "/ready-container-1".to_string(),
+        InboundHttpRoute {
+            rules: vec![InboundHttpRouteRule {
+                matches: vec![HttpRouteMatch {
+                    path: Some(PathMatch::Exact("/ready-container-1".to_string())),
+                    method: Some(Method::GET),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            authorizations: expected_authorizations,
+            ..Default::default()
+        },
+    );
+    assert_eq!(rx.borrow_and_update().http_routes, expected_routes);
 }
 
 fn mk_http_route(

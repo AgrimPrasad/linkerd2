@@ -8,18 +8,25 @@ use super::*;
 #[test]
 fn default_policy_annotated() {
     for default in &DEFAULTS {
-        let test = TestConfig::from_default_policy(match *default {
-            // Invert default to ensure override applies.
-            DefaultPolicy::Deny => DefaultPolicy::Allow {
-                authenticated_only: false,
-                cluster_only: false,
+        let test = TestConfig::from_default_policy(
+            match *default {
+                // Invert default to ensure override applies.
+                DefaultPolicy::Deny => DefaultPolicy::Allow {
+                    authenticated_only: false,
+                    cluster_only: false,
+                },
+                _ => DefaultPolicy::Deny,
             },
-            _ => DefaultPolicy::Deny,
-        });
+            None,
+        );
 
         // Initially create the pod without an annotation and check that it gets
         // the global default.
-        let mut pod = mk_pod("ns-0", "pod-0", Some(("container-0", None)));
+        let container = k8s::Container {
+            name: "container-0".to_string(),
+            ..Default::default()
+        };
+        let mut pod = mk_pod("ns-0", "pod-0", Some(container));
         test.index
             .write()
             .reset(vec![pod.clone()], Default::default());
@@ -55,7 +62,11 @@ fn default_policy_annotated() {
 async fn default_policy_annotated_invalid() {
     let test = TestConfig::default();
 
-    let mut p = mk_pod("ns-0", "pod-0", Some(("container-0", None)));
+    let container = k8s::Container {
+        name: "container-0".to_string(),
+        ..Default::default()
+    };
+    let mut p = mk_pod("ns-0", "pod-0", Some(container));
     p.annotations_mut().insert(
         "config.linkerd.io/default-inbound-policy".into(),
         "bogus".into(),
@@ -74,9 +85,13 @@ async fn default_policy_annotated_invalid() {
 #[test]
 fn opaque_annotated() {
     for default in &DEFAULTS {
-        let test = TestConfig::from_default_policy(*default);
+        let test = TestConfig::from_default_policy(*default, None);
 
-        let mut p = mk_pod("ns-0", "pod-0", Some(("container-0", None)));
+        let container = k8s::Container {
+            name: "container-0".to_string(),
+            ..Default::default()
+        };
+        let mut p = mk_pod("ns-0", "pod-0", Some(container));
         p.annotations_mut()
             .insert("config.linkerd.io/opaque-ports".into(), "2222".into());
         test.index.write().reset(vec![p], Default::default());
@@ -96,9 +111,13 @@ fn opaque_annotated() {
 #[test]
 fn authenticated_annotated() {
     for default in &DEFAULTS {
-        let test = TestConfig::from_default_policy(*default);
+        let test = TestConfig::from_default_policy(*default, None);
 
-        let mut p = mk_pod("ns-0", "pod-0", Some(("container-0", None)));
+        let container = k8s::Container {
+            name: "container-0".to_string(),
+            ..Default::default()
+        };
+        let mut p = mk_pod("ns-0", "pod-0", Some(container));
         p.annotations_mut().insert(
             "config.linkerd.io/proxy-require-identity-inbound-ports".into(),
             "2222".into(),
